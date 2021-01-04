@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${command:cmake.launchTargetPath}",
-            "args": ["-p", "0", "/dev/sg2"],
+            "args": ["-p", "0", "/dev/sg6"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
@@ -23,6 +23,7 @@
                 }
             ],
             "logging": {"engineLogging": true}
+            
         }
 
     ]

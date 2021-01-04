@@ -1152,7 +1152,7 @@ open_of(const char *outf, int64_t seek, int bpt, struct flags_t *ofp,
         if ((outfd = open(outf, flags)) < 0)
         {
             snprintf(ebuff, EBUFF_SZ,
-                     ME "could not open %s for sg writing", outf);
+                     ME "could not open %s for sg reading", outf);
             perror(ebuff);
             goto file_err;
         }
@@ -1543,6 +1543,11 @@ read_verify_device(char *device_name, int bytes, int *byte, t_stats *stats)
                     int blks_readp = 0;
                     res = sg_read(outfd, sector_data, sectors_to_process, seek, blk_sz,
                                   &oflag, &diop, &blks_readp);
+                    if (memcmp(sector_data, check_data, sectors_to_process)!=0){
+                        pr2serr("start sector %" PRId64 "error\n", sector);
+                    }
+                    if (0 == res)
+                        break;
                     if (-2 == res)
                     { /* ENOMEM, find what's available+try that */
                         if (ioctl(outfd, SG_GET_RESERVED_SIZE, &buf_sz) < 0)
