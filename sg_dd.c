@@ -48,7 +48,7 @@
 #include <sys/time.h>
 #include <sys/file.h>
 #include <linux/major.h>
-#include <linux/fs.h>   /* <sys/mount.h> */
+#include <linux/fs.h> /* <sys/mount.h> */
 #include <time.h>
 #include <stdbool.h>
 
@@ -65,13 +65,13 @@
 
 #include "common.h"
 
-static const char * version_str = "5.87 20201124";
+static const char *version_str = "5.87 20201124";
 
-#define ME "dskwipe: "
+#define ME "dskread: "
 
-#define APPNAME			"dskWipe"
-#define APPVERSION		"1.0.0.3"
-#define APPCOPYRIGHT	"CopyRight(c) 2017-2027."
+#define APPNAME "dskread"
+#define APPVERSION "1.0.0.3"
+#define APPCOPYRIGHT "CopyRight(c) 2021-2027."
 
 static char *progname = APPNAME;
 
@@ -93,30 +93,30 @@ static char *progname = APPNAME;
 #define CACHING_MP 8
 #define CONTROL_MP 0xa
 
-#define SENSE_BUFF_LEN 64       /* Arbitrary, could be larger */
+#define SENSE_BUFF_LEN 64 /* Arbitrary, could be larger */
 #define READ_CAP_REPLY_LEN 8
 #define RCAP16_REPLY_LEN 32
 #define READ_LONG_OPCODE 0x3E
 #define READ_LONG_CMD_LEN 10
 #define READ_LONG_DEF_BLK_INC 8
 
-#define DEF_TIMEOUT 60000       /* 60,000 millisecs == 60 seconds */
+#define DEF_TIMEOUT 60000 /* 60,000 millisecs == 60 seconds */
 
 #ifndef RAW_MAJOR
-#define RAW_MAJOR 255   /*unlikey value */
+#define RAW_MAJOR 255 /*unlikey value */
 #endif
 
 #define SG_LIB_FLOCK_ERR 90
 
-#define FT_OTHER 1              /* filetype is probably normal */
-#define FT_SG 2                 /* filetype is sg char device or supports
-                                   SG_IO ioctl */
-#define FT_RAW 4                /* filetype is raw char device */
-#define FT_DEV_NULL 8           /* either "/dev/null" or "." as filename */
-#define FT_ST 16                /* filetype is st char device (tape) */
-#define FT_BLOCK 32             /* filetype is block device */
-#define FT_FIFO 64              /* filetype is a fifo (name pipe) */
-#define FT_ERROR 128            /* couldn't "stat" file */
+#define FT_OTHER 1    /* filetype is probably normal */
+#define FT_SG 2       /* filetype is sg char device or supports \
+                         SG_IO ioctl */
+#define FT_RAW 4      /* filetype is raw char device */
+#define FT_DEV_NULL 8 /* either "/dev/null" or "." as filename */
+#define FT_ST 16      /* filetype is st char device (tape) */
+#define FT_BLOCK 32   /* filetype is block device */
+#define FT_FIFO 64    /* filetype is a fifo (name pipe) */
+#define FT_ERROR 128  /* couldn't "stat" file */
 
 #define DEV_NULL_MINOR_NUM 3
 
@@ -149,13 +149,12 @@ static int blk_sz = 512;
 static int max_uas = MAX_UNIT_ATTENTIONS;
 static int max_aborted = MAX_ABORTED_CMDS;
 
-
 //          1         2         3         4         5         6         7         8         9
 // 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
-#define HEADER  "                     This      All      All     This                               Single\n" \
-"Pass No. of          Pass   Passes   Passes     Pass              Est.     %s/      %s/\n" \
-" No. Passes Byte Complete Complete  Elapsed  Consume    Start   Finish   Second   Second\n" \
-"---- ------ ---- -------- -------- -------- -------- -------- -------- -------- --------\n"
+#define HEADER "                     This      All      All     This                               Single\n" \
+               "Pass No. of          Pass   Passes   Passes     Pass              Est.     %s/      %s/\n"   \
+               " No. Passes Byte Complete Complete  Elapsed  Consume    Start   Finish   Second   Second\n"  \
+               "---- ------ ---- -------- -------- -------- -------- -------- -------- -------- --------\n"
 // 1234 123456 0xff 100.000% 100.000% 00:00:00 00:00:00 00:00:00 00:00:00 12345.67  //consume
 
 #ifdef DEBUG
@@ -164,55 +163,50 @@ static int max_aborted = MAX_ABORTED_CMDS;
 #define FORMAT_STRING "%4d %6d %4s %7.3f%% %7.3f%%%9s%9s %8s %8s%9.2f%9.2f\r"
 #endif
 
-
 #define BYTES_PER_ELEMENT (3)
 
 #define SECTORS_PER_READ (128)
 
-#define RANDOMDATAFLAG		-1
-#define CHECKDATAFLAG		-2
+#define RANDOMDATAFLAG -1
+#define CHECKDATAFLAG -2
 
-
-static char *short_options = "de:Egkn:p:rR:s:Sw:vV:yz:D?";
+static char *short_options = "V:n:p:vk?";
 static int read_long_blk_inc = READ_LONG_DEF_BLK_INC;
 
 static struct option long_options[] = {
-  {"verbose",		required_argument,	0, 'V'},
-  {"help",		no_argument,		0, '?'},
-  {"kilo",		no_argument,		0, 'k'},
-  {"kilobyte",	no_argument,		0, 'k'},
-  {"sectors",	required_argument,	0, 'n'},
-  {"start",		required_argument,	0, 's'},
-  {"version",	no_argument,		0, 'v'},
-  {"llformat",	required_argument,  0, 'w'},
+    {"verbose", required_argument, 0, 'V'},
+    {"help", no_argument, 0, '?'},
+    {"kilo", no_argument, 0, 'k'},
+    {"kilobyte", no_argument, 0, 'k'},
+    {"sectors", required_argument, 0, 'n'},
+    {"start", required_argument, 0, 's'},
+    {"version", no_argument, 0, 'v'},
+    {"patten", required_argument, 0, 'p'}, // gdisk compatible
+    {NULL, 0, 0, 0}};
 
-  {"customwipe",required_argument,	0, 'p'}, // gdisk compatible
-  {"dodwipe",	no_argument,		0, 'd'}, // gdisk compatible
-  {NULL,		0,					0, 0}
-};
-
-void version() {
-	printf(APPNAME " " APPVERSION " - " __DATE__ "\n");
-	printf(APPCOPYRIGHT "\n");
+void version()
+{
+    printf(APPNAME " " APPVERSION " - " __DATE__ "\n");
+    printf(APPCOPYRIGHT "\n");
 }
 
-void _usage() {
-	fprintf(stderr, "Usage: %s [options] device(s) [byte(s)]\n"
-		" bytes can be one or more numbers between 0 to 255, use 0xNN for hexidecimal,\n"
-		"  0NNN for octal, r for random bytes, default is 0\n"
-		"\nOptions:\n"
-		" -p | --passes n  Wipe device n times (default is 1)\n"
-		" -g | --gutmann   Wipe device using Peter Gutmann's method (35 passes)\n"
-		" -k | --kilobyte  Use 1024 for kilobyte (default is 1000)\n"
-      //          1         2         3         4         5         6         7
-      // 12345678901234567890123456789012345678901234567890123456789012345678901234567890
+void _usage()
+{
+    fprintf(stderr, "Usage: %s [options] device(s) -p 0xff\n"
+                    " bytes can be one or more numbers between 0 to 255, use 0xNN for hexidecimal,\n"
+                    "  0NNN for octal, r for random bytes, default is 0\n"
+                    "\nOptions:\n"
+                    " -k | --kilobyte  Use 1024 for kilobyte (default is 1000)\n"
+                    //          1         2         3         4         5         6         7
+                    // 12345678901234567890123456789012345678901234567890123456789012345678901234567890
 
-		" -n | --sectors n Write n sectors at once (1-65535, default is %d)\n"
-		" -s | --start   n Start at relative sector n (default is 0)\n"
-		" -e | --end     n End at relative sector n (default is last sector)\n"
-		" -v | --version   Show version and copyright information and quit\n"
-		" -? | --help      Show this help message and quit (-?? = more help, etc.)\n",
-		progname, SECTORS_PER_READ);
+                    " -n | --sectors n Write n sectors at once (1-65535, default is %d)\n"
+                    " -s | --start   n Start at relative sector n (default is 0)\n"
+                    " -e | --end     n End at relative sector n (default is last sector)\n"
+                    " -v | --version   Show version and copyright information and quit\n"
+                    " -p | --patten n  check buffer\n"
+                    " -? | --help      Show this help message and quit (-?? = more help, etc.)\n",
+            progname, SECTORS_PER_READ);
 }
 
 // void examples() {
@@ -236,12 +230,14 @@ void _usage() {
 // 		progname);
 // }
 
-void usage(int exit_code) {
-	_usage();
-	exit(exit_code);
+void usage(int exit_code)
+{
+    _usage();
+    exit(exit_code);
 }
 
-struct flags_t {
+struct flags_t
+{
     int append;
     int cdbsz;
     int coe;
@@ -259,30 +255,27 @@ struct flags_t {
     int retries;
 };
 
-
 static struct flags_t iflag;
 static struct flags_t oflag;
 
 static void calc_duration_throughput(int contin);
 
-
 static void
-install_handler(int sig_num, void (*sig_handler) (int sig))
+install_handler(int sig_num, void (*sig_handler)(int sig))
 {
     struct sigaction sigact;
-    sigaction (sig_num, NULL, &sigact);
+    sigaction(sig_num, NULL, &sigact);
     if (sigact.sa_handler != SIG_IGN)
     {
         sigact.sa_handler = sig_handler;
-        sigemptyset (&sigact.sa_mask);
+        sigemptyset(&sigact.sa_mask);
         sigact.sa_flags = 0;
-        sigaction (sig_num, &sigact, NULL);
+        sigaction(sig_num, &sigact, NULL);
     }
 }
 
-
 static void
-print_stats_sg(const char * str)
+print_stats_sg(const char *str)
 {
     if (0 != dd_count)
         pr2serr("  remaining block count=%" PRId64 "\n", dd_count);
@@ -296,14 +289,15 @@ print_stats_sg(const char * str)
         pr2serr("%s%d recovered errors\n", str, recovered_errs);
     if (num_retries > 0)
         pr2serr("%s%d retries attempted\n", str, num_retries);
-    if (iflag.coe || oflag.coe) {
+    if (iflag.coe || oflag.coe)
+    {
         pr2serr("%s%d unrecovered errors\n", str, unrecovered_errs);
         pr2serr("%s%d read_longs fetched part of unrecovered read errors\n",
                 str, read_longs);
-    } else if (unrecovered_errs)
+    }
+    else if (unrecovered_errs)
         pr2serr("%s%d unrecovered error(s)\n", str, unrecovered_errs);
 }
-
 
 static void
 interrupt_handler(int sig)
@@ -318,14 +312,16 @@ interrupt_handler(int sig)
     if (do_time)
         calc_duration_throughput(0);
     print_stats_sg("");
-    kill(getpid (), sig);
+    kill(getpid(), sig);
 }
-
 
 static void
 siginfo_handler(int sig)
 {
-    if (sig) { ; }      /* unused, dummy to suppress warning */
+    if (sig)
+    {
+        ;
+    } /* unused, dummy to suppress warning */
     pr2serr("Progress report, continuing ...\n");
     if (do_time)
         calc_duration_throughput(1);
@@ -338,33 +334,40 @@ static int bsg_major = 0;
 static void
 find_bsg_major(void)
 {
-    const char * proc_devices = "/proc/devices";
+    const char *proc_devices = "/proc/devices";
     FILE *fp;
     char a[128];
     char b[128];
-    char * cp;
+    char *cp;
     int n;
 
-    if (NULL == (fp = fopen(proc_devices, "r"))) {
+    if (NULL == (fp = fopen(proc_devices, "r")))
+    {
         if (verbose)
             pr2serr("fopen %s failed: %s\n", proc_devices, strerror(errno));
         return;
     }
-    while ((cp = fgets(b, sizeof(b), fp))) {
+    while ((cp = fgets(b, sizeof(b), fp)))
+    {
         if ((1 == sscanf(b, "%126s", a)) &&
             (0 == memcmp(a, "Character", 9)))
             break;
     }
-    while (cp && (cp = fgets(b, sizeof(b), fp))) {
-        if (2 == sscanf(b, "%d %126s", &n, a)) {
-            if (0 == strcmp("bsg", a)) {
+    while (cp && (cp = fgets(b, sizeof(b), fp)))
+    {
+        if (2 == sscanf(b, "%d %126s", &n, a))
+        {
+            if (0 == strcmp("bsg", a))
+            {
                 bsg_major = n;
                 break;
             }
-        } else
+        }
+        else
             break;
     }
-    if (verbose > 5) {
+    if (verbose > 5)
+    {
         if (cp)
             pr2serr("found bsg_major=%d\n", bsg_major);
         else
@@ -373,9 +376,8 @@ find_bsg_major(void)
     fclose(fp);
 }
 
-
 static int
-dd_filetype(const char * filename)
+dd_filetype(const char *filename)
 {
     struct stat st;
     size_t len = strlen(filename);
@@ -384,7 +386,8 @@ dd_filetype(const char * filename)
         return FT_DEV_NULL;
     if (stat(filename, &st) < 0)
         return FT_ERROR;
-    if (S_ISCHR(st.st_mode)) {
+    if (S_ISCHR(st.st_mode))
+    {
         /* major() and minor() defined in sys/sysmacros.h */
         if ((MEM_MAJOR == major(st.st_rdev)) &&
             (DEV_NULL_MINOR_NUM == minor(st.st_rdev)))
@@ -395,22 +398,23 @@ dd_filetype(const char * filename)
             return FT_SG;
         if (SCSI_TAPE_MAJOR == major(st.st_rdev))
             return FT_ST;
-        if (! bsg_major_checked) {
+        if (!bsg_major_checked)
+        {
             bsg_major_checked = 1;
             find_bsg_major();
         }
         if (bsg_major == (int)major(st.st_rdev))
             return FT_SG;
-    } else if (S_ISBLK(st.st_mode))
+    }
+    else if (S_ISBLK(st.st_mode))
         return FT_BLOCK;
     else if (S_ISFIFO(st.st_mode))
         return FT_FIFO;
     return FT_OTHER;
 }
 
-
 static char *
-dd_filetype_str(int ft, char * buff)
+dd_filetype_str(int ft, char *buff)
 {
     int off = 0;
 
@@ -435,20 +439,21 @@ dd_filetype_str(int ft, char * buff)
 
 /* Return of 0 -> success, see sg_ll_read_capacity*() otherwise */
 static int
-scsi_read_capacity(int sg_fd, int64_t * num_sect, int * sect_sz)
+scsi_read_capacity(int sg_fd, int64_t *num_sect, int *sect_sz)
 {
     int res;
     unsigned int ui;
     unsigned char rcBuff[RCAP16_REPLY_LEN];
     int verb;
 
-    verb = (verbose ? verbose - 1: 0);
+    verb = (verbose ? verbose - 1 : 0);
     res = sg_ll_readcap_10(sg_fd, 0, 0, rcBuff, READ_CAP_REPLY_LEN, 1, verb);
     if (0 != res)
         return res;
 
     if ((0xff == rcBuff[0]) && (0xff == rcBuff[1]) && (0xff == rcBuff[2]) &&
-        (0xff == rcBuff[3])) {
+        (0xff == rcBuff[3]))
+    {
         int64_t ls;
 
         res = sg_ll_readcap_16(sg_fd, 0, 0, rcBuff, RCAP16_REPLY_LEN, 1,
@@ -458,7 +463,9 @@ scsi_read_capacity(int sg_fd, int64_t * num_sect, int * sect_sz)
         ls = (int64_t)sg_get_unaligned_be64(rcBuff);
         *num_sect = ls + 1;
         *sect_sz = (int)sg_get_unaligned_be32(rcBuff + 8);
-    } else {
+    }
+    else
+    {
         ui = sg_get_unaligned_be32(rcBuff);
         /* take care not to sign extend values > 0x7fffffff */
         *num_sect = (int64_t)ui + 1;
@@ -466,59 +473,13 @@ scsi_read_capacity(int sg_fd, int64_t * num_sect, int * sect_sz)
     }
     if (verbose)
         pr2serr("      number of blocks=%" PRId64 " [0x%" PRIx64 "], "
-                "block size=%d\n", *num_sect, *num_sect, *sect_sz);
+                "block size=%d\n",
+                *num_sect, *num_sect, *sect_sz);
     return 0;
 }
 
-
-/* Return of 0 -> success, -1 -> failure. BLKGETSIZE64, BLKGETSIZE and */
-/* BLKSSZGET macros problematic (from <linux/fs.h> or <sys/mount.h>). */
-//static int
-//read_blkdev_capacity(int sg_fd, int64_t * num_sect, int * sect_sz)
-//{
-//#ifdef BLKSSZGET
-//    if ((ioctl(sg_fd, BLKSSZGET, sect_sz) < 0) && (*sect_sz > 0)) {
-//        perror("BLKSSZGET ioctl error");
-//        return -1;
-//    } else {
-// #ifdef BLKGETSIZE64
-//        uint64_t ull;
-//
-//        if (ioctl(sg_fd, BLKGETSIZE64, &ull) < 0) {
-//
-//            perror("BLKGETSIZE64 ioctl error");
-//            return -1;
-//        }
-//        *num_sect = ((int64_t)ull / (int64_t)*sect_sz);
-//        if (verbose)
-//            pr2serr("      [bgs64] number of blocks=%" PRId64 " [0x%" PRIx64
-//                    "], block size=%d\n", *num_sect, *num_sect, *sect_sz);
-// #else
-//        unsigned long ul;
-//
-//        if (ioctl(sg_fd, BLKGETSIZE, &ul) < 0) {
-//            perror("BLKGETSIZE ioctl error");
-//            return -1;
-//        }
-//        *num_sect = (int64_t)ul;
-//        if (verbose)
-//            pr2serr("      [bgs] number of blocks=%" PRId64 " [0x%" PRIx64
-//                    "],  block size=%d\n", *num_sect, *num_sect, *sect_sz);
-// #endif
-//    }
-//    return 0;
-//#else
-//    if (verbose)
-//        pr2serr("      BLKSSZGET+BLKGETSIZE ioctl not available\n");
-//    *num_sect = 0;
-//    *sect_sz = 0;
-//    return -1;
-//#endif
-//}
-
-
 static int
-sg_build_scsi_cdb(unsigned char * cdbp, int cdb_sz, unsigned int blocks,
+sg_build_scsi_cdb(unsigned char *cdbp, int cdb_sz, unsigned int blocks,
                   int64_t start_block, int write_true, int fua, int dpo)
 {
     int rd_opcode[] = {0x8, 0x28, 0xa8, 0x88};
@@ -530,52 +491,55 @@ sg_build_scsi_cdb(unsigned char * cdbp, int cdb_sz, unsigned int blocks,
         cdbp[1] |= 0x10;
     if (fua)
         cdbp[1] |= 0x8;
-    switch (cdb_sz) {
+    switch (cdb_sz)
+    {
     case 6:
         sz_ind = 0;
-        cdbp[0] = (unsigned char)(write_true ? wr_opcode[sz_ind] :
-                                               rd_opcode[sz_ind]);
+        cdbp[0] = (unsigned char)(write_true ? wr_opcode[sz_ind] : rd_opcode[sz_ind]);
         sg_put_unaligned_be24(0x1fffff & start_block, cdbp + 1);
         cdbp[4] = (256 == blocks) ? 0 : (unsigned char)blocks;
-        if (blocks > 256) {
+        if (blocks > 256)
+        {
             pr2serr(ME "for 6 byte commands, maximum number of blocks is "
-                    "256\n");
+                       "256\n");
             return 1;
         }
-        if ((start_block + blocks - 1) & (~0x1fffff)) {
+        if ((start_block + blocks - 1) & (~0x1fffff))
+        {
             pr2serr(ME "for 6 byte commands, can't address blocks beyond "
-                    "%d\n", 0x1fffff);
+                       "%d\n",
+                    0x1fffff);
             return 1;
         }
-        if (dpo || fua) {
+        if (dpo || fua)
+        {
             pr2serr(ME "for 6 byte commands, neither dpo nor fua bits "
-                    "supported\n");
+                       "supported\n");
             return 1;
         }
         break;
     case 10:
         sz_ind = 1;
-        cdbp[0] = (unsigned char)(write_true ? wr_opcode[sz_ind] :
-                                               rd_opcode[sz_ind]);
+        cdbp[0] = (unsigned char)(write_true ? wr_opcode[sz_ind] : rd_opcode[sz_ind]);
         sg_put_unaligned_be32(start_block, cdbp + 2);
         sg_put_unaligned_be16(blocks, cdbp + 7);
-        if (blocks & (~0xffff)) {
+        if (blocks & (~0xffff))
+        {
             pr2serr(ME "for 10 byte commands, maximum number of blocks is "
-                    "%d\n", 0xffff);
+                       "%d\n",
+                    0xffff);
             return 1;
         }
         break;
     case 12:
         sz_ind = 2;
-        cdbp[0] = (unsigned char)(write_true ? wr_opcode[sz_ind] :
-                                               rd_opcode[sz_ind]);
+        cdbp[0] = (unsigned char)(write_true ? wr_opcode[sz_ind] : rd_opcode[sz_ind]);
         sg_put_unaligned_be32(start_block, cdbp + 2);
         sg_put_unaligned_be32(blocks, cdbp + 6);
         break;
     case 16:
         sz_ind = 3;
-        cdbp[0] = (unsigned char)(write_true ? wr_opcode[sz_ind] :
-                                               rd_opcode[sz_ind]);
+        cdbp[0] = (unsigned char)(write_true ? wr_opcode[sz_ind] : rd_opcode[sz_ind]);
         sg_put_unaligned_be64(start_block, cdbp + 2);
         sg_put_unaligned_be32(blocks, cdbp + 10);
         break;
@@ -595,19 +559,20 @@ sg_build_scsi_cdb(unsigned char * cdbp, int cdb_sz, unsigned int blocks,
    -2 -> ENOMEM
    -1 other errors */
 static int
-sg_read_low(int sg_fd, uint8_t * buff, int blocks, int64_t from_block,
-            int bs, const struct flags_t * ifp, bool * diop,
-            uint64_t * io_addrp)
+sg_read_low(int sg_fd, uint8_t *buff, int blocks, int64_t from_block,
+            int bs, const struct flags_t *ifp, bool *diop,
+            uint64_t *io_addrp)
 {
     bool info_valid;
     int res, slen;
-    const uint8_t * sbp;
+    const uint8_t *sbp;
     uint8_t rdCmd[MAX_SCSI_CDBSZ];
     uint8_t senseBuff[SENSE_BUFF_LEN];
     struct sg_io_hdr io_hdr;
 
     if (sg_build_scsi_cdb(rdCmd, ifp->cdbsz, blocks, from_block, 0,
-                          ifp->fua, ifp->dpo)) {
+                          ifp->fua, ifp->dpo))
+    {
         pr2serr(ME "bad rd cdb build, from_block=%" PRId64 ", blocks=%d\n",
                 from_block, blocks);
         return SG_LIB_SYNTAX_ERROR;
@@ -633,7 +598,8 @@ sg_read_low(int sg_fd, uint8_t * buff, int blocks, int64_t from_block,
     while (((res = ioctl(sg_fd, SG_IO, &io_hdr)) < 0) &&
            ((EINTR == errno) || (EAGAIN == errno) || (EBUSY == errno)))
         ;
-    if (res < 0) {
+    if (res < 0)
+    {
         if (ENOMEM == errno)
             return -2;
         perror("reading (SG_IO) on sg device, error");
@@ -644,21 +610,27 @@ sg_read_low(int sg_fd, uint8_t * buff, int blocks, int64_t from_block,
     res = sg_err_category3(&io_hdr);
     sbp = io_hdr.sbp;
     slen = io_hdr.sb_len_wr;
-    switch (res) {
+    switch (res)
+    {
     case SG_LIB_CAT_CLEAN:
     case SG_LIB_CAT_CONDITION_MET:
         break;
     case SG_LIB_CAT_RECOVERED:
         ++recovered_errs;
         info_valid = sg_get_sense_info_fld(sbp, slen, io_addrp);
-        if (info_valid) {
+        if (info_valid)
+        {
             pr2serr("    lba of last recovered error in this READ=0x%" PRIx64
-                    "\n", *io_addrp);
+                    "\n",
+                    *io_addrp);
             if (verbose > 1)
                 sg_chk_n_print3("reading", &io_hdr, true);
-        } else {
+        }
+        else
+        {
             pr2serr("Recovered error: [no info] reading from block=0x%" PRIx64
-                    ", num=%d\n", from_block, blocks);
+                    ", num=%d\n",
+                    from_block, blocks);
             sg_chk_n_print3("reading", &io_hdr, verbose > 1);
         }
         break;
@@ -674,7 +646,8 @@ sg_read_low(int sg_fd, uint8_t * buff, int blocks, int64_t from_block,
         /* MMC devices don't necessarily set VALID bit */
         if (info_valid || ((5 == ifp->pdt) && (*io_addrp > 0)))
             return SG_LIB_CAT_MEDIUM_HARD_WITH_INFO;
-        else {
+        else
+        {
             pr2serr("Medium, hardware or blank check error but no lba of "
                     "failure in sense\n");
             return res;
@@ -686,21 +659,27 @@ sg_read_low(int sg_fd, uint8_t * buff, int blocks, int64_t from_block,
             sg_chk_n_print3("reading", &io_hdr, verbose > 1);
         return res;
     case SG_LIB_CAT_ILLEGAL_REQ:
-        if (5 == ifp->pdt) {    /* MMC READs can go down this path */
+        if (5 == ifp->pdt)
+        { /* MMC READs can go down this path */
             bool ili;
             struct sg_scsi_sense_hdr ssh;
 
             if (verbose > 1)
                 sg_chk_n_print3("reading", &io_hdr, verbose > 1);
             if (sg_scsi_normalize_sense(sbp, slen, &ssh) &&
-                (0x64 == ssh.asc) && (0x0 == ssh.ascq)) {
+                (0x64 == ssh.asc) && (0x0 == ssh.ascq))
+            {
                 if (sg_get_sense_filemark_eom_ili(sbp, slen, NULL, NULL,
-                                                  &ili) && ili) {
+                                                  &ili) &&
+                    ili)
+                {
                     sg_get_sense_info_fld(sbp, slen, io_addrp);
-                    if (*io_addrp > 0) {
+                    if (*io_addrp > 0)
+                    {
                         ++unrecovered_errs;
                         return SG_LIB_CAT_MEDIUM_HARD_WITH_INFO;
-                    } else
+                    }
+                    else
                         pr2serr("MMC READ gave 'illegal mode for this track' "
                                 "and ILI but no LBA of failure\n");
                 }
@@ -722,19 +701,18 @@ sg_read_low(int sg_fd, uint8_t * buff, int blocks, int64_t from_block,
     }
     if (diop && *diop &&
         ((io_hdr.info & SG_INFO_DIRECT_IO_MASK) != SG_INFO_DIRECT_IO))
-        *diop = false;      /* flag that dio not done (completely) */
+        *diop = false; /* flag that dio not done (completely) */
     // sum_of_resids += io_hdr.resid;
     return 0;
 }
-
 
 /* 0 -> successful, SG_LIB_SYNTAX_ERROR -> unable to build cdb,
    SG_LIB_CAT_UNIT_ATTENTION -> try again, SG_LIB_CAT_NOT_READY,
    SG_LIB_CAT_MEDIUM_HARD, SG_LIB_CAT_ABORTED_COMMAND,
    -2 -> ENOMEM, -1 other errors */
 static int
-sg_read(int sg_fd, uint8_t * buff, int blocks, int64_t from_block,
-        int bs, struct flags_t * ifp, bool * diop, int * blks_readp)
+sg_read(int sg_fd, uint8_t *buff, int blocks, int64_t from_block,
+        int bs, struct flags_t *ifp, bool *diop, int *blks_readp)
 {
     bool may_coe = false;
     bool repeat;
@@ -743,47 +721,56 @@ sg_read(int sg_fd, uint8_t * buff, int blocks, int64_t from_block,
     int retries_tmp;
     uint64_t io_addr;
     int64_t lba;
-    uint8_t * bp;
+    uint8_t *bp;
 
     retries_tmp = ifp->retries;
     for (xferred = 0, blks = blocks, lba = from_block, bp = buff;
-         blks > 0; blks = blocks - xferred) {
+         blks > 0; blks = blocks - xferred)
+    {
         io_addr = 0;
         repeat = false;
         may_coe = false;
         res = sg_read_low(sg_fd, bp, blks, lba, bs, ifp, diop, &io_addr);
-        switch (res) {
+        switch (res)
+        {
         case 0:
             if (blks_readp)
                 *blks_readp = xferred + blks;
             // if (coe_limit > 0)
             //     coe_count = 0;  /* good read clears coe_count */
             return 0;
-        case -2:        /* ENOMEM */
+        case -2: /* ENOMEM */
             return res;
         case SG_LIB_CAT_NOT_READY:
             pr2serr("Device (r) not ready\n");
             return res;
         case SG_LIB_CAT_ABORTED_COMMAND:
-            if (--max_aborted > 0) {
+            if (--max_aborted > 0)
+            {
                 pr2serr("Aborted command, continuing (r)\n");
                 repeat = true;
-            } else {
+            }
+            else
+            {
                 pr2serr("Aborted command, too many (r)\n");
                 return res;
             }
             break;
         case SG_LIB_CAT_UNIT_ATTENTION:
-            if (--max_uas > 0) {
+            if (--max_uas > 0)
+            {
                 pr2serr("Unit attention, continuing (r)\n");
                 repeat = true;
-            } else {
+            }
+            else
+            {
                 pr2serr("Unit attention, too many (r)\n");
                 return res;
             }
             break;
         case SG_LIB_CAT_MEDIUM_HARD_WITH_INFO:
-            if (retries_tmp > 0) {
+            if (retries_tmp > 0)
+            {
                 pr2serr(">>> retrying a sgio read, lba=0x%" PRIx64 "\n",
                         (uint64_t)lba);
                 --retries_tmp;
@@ -810,7 +797,8 @@ sg_read(int sg_fd, uint8_t * buff, int blocks, int64_t from_block,
 #endif
 #endif
         default:
-            if (retries_tmp > 0) {
+            if (retries_tmp > 0)
+            {
                 pr2serr(">>> retrying a sgio read, lba=0x%" PRIx64 "\n",
                         (uint64_t)lba);
                 --retries_tmp;
@@ -826,21 +814,24 @@ sg_read(int sg_fd, uint8_t * buff, int blocks, int64_t from_block,
         if (repeat)
             continue;
         if ((io_addr < (uint64_t)lba) ||
-            (io_addr >= (uint64_t)(lba + blks))) {
-                pr2serr("  Unrecovered error lba 0x%" PRIx64 " not in "
-                        "correct range:\n\t[0x%" PRIx64 ",0x%" PRIx64 "]\n",
-                        io_addr, (uint64_t)lba,
-                        (uint64_t)(lba + blks - 1));
+            (io_addr >= (uint64_t)(lba + blks)))
+        {
+            pr2serr("  Unrecovered error lba 0x%" PRIx64 " not in "
+                    "correct range:\n\t[0x%" PRIx64 ",0x%" PRIx64 "]\n",
+                    io_addr, (uint64_t)lba,
+                    (uint64_t)(lba + blks - 1));
             may_coe = true;
             goto err_out;
         }
         blks = (int)(io_addr - (uint64_t)lba);
-        if (blks > 0) {
+        if (blks > 0)
+        {
             if (verbose)
                 pr2serr("  partial read of %d blocks prior to medium error\n",
                         blks);
             res = sg_read_low(sg_fd, bp, blks, lba, bs, ifp, diop, &io_addr);
-            switch (res) {
+            switch (res)
+            {
             case 0:
                 break;
             case -1:
@@ -872,46 +863,55 @@ sg_read(int sg_fd, uint8_t * buff, int blocks, int64_t from_block,
             }
         }
         xferred += blks;
-        if (0 == ifp->coe) {
+        if (0 == ifp->coe)
+        {
             /* give up at block before problem unless 'coe' */
             if (blks_readp)
                 *blks_readp = xferred;
             return ret;
         }
-        if (bs < 32) {
+        if (bs < 32)
+        {
             pr2serr(">> bs=%d too small for read_long\n", bs);
-            return -1;  /* nah, block size can't be that small */
+            return -1; /* nah, block size can't be that small */
         }
         bp += (blks * bs);
         lba += blks;
-        if ((0 != ifp->pdt) || (ifp->coe < 2)) {
+        if ((0 != ifp->pdt) || (ifp->coe < 2))
+        {
             pr2serr(">> unrecovered read error at blk=%" PRId64 ", pdt=%d, "
-                    "use zeros\n", lba, ifp->pdt);
+                    "use zeros\n",
+                    lba, ifp->pdt);
             memset(bp, 0, bs);
-        } else if (io_addr < UINT_MAX) {
+        }
+        else if (io_addr < UINT_MAX)
+        {
             bool corrct, ok;
             int offset, nl, r;
-            uint8_t * buffp;
-            uint8_t * free_buffp;
+            uint8_t *buffp;
+            uint8_t *free_buffp;
 
             buffp = sg_memalign(bs * 2, 0, &free_buffp, false);
-            if (NULL == buffp) {
+            if (NULL == buffp)
+            {
                 pr2serr(">> heap problems\n");
                 return -1;
             }
             corrct = (ifp->coe > 2);
-            res = sg_ll_read_long10(sg_fd, /* pblock */false, corrct, lba,
+            res = sg_ll_read_long10(sg_fd, /* pblock */ false, corrct, lba,
                                     buffp, bs + read_long_blk_inc, &offset,
                                     true, verbose);
             ok = false;
-            switch (res) {
+            switch (res)
+            {
             case 0:
                 ok = true;
                 ++read_longs;
                 break;
             case SG_LIB_CAT_ILLEGAL_REQ_WITH_INFO:
                 nl = bs + read_long_blk_inc - offset;
-                if ((nl < 32) || (nl > (bs * 2))) {
+                if ((nl < 32) || (nl > (bs * 2)))
+                {
                     pr2serr(">> read_long(10) len=%d unexpected\n", nl);
                     break;
                 }
@@ -922,13 +922,16 @@ sg_read(int sg_fd, uint8_t * buff, int blocks, int64_t from_block,
                     pr2serr("read_long(10): adjusted len=%d\n", nl);
                 r = sg_ll_read_long10(sg_fd, false, corrct, lba, buffp, nl,
                                       &offset, true, verbose);
-                if (0 == r) {
+                if (0 == r)
+                {
                     ok = true;
                     ++read_longs;
                     break;
-                } else
+                }
+                else
                     pr2serr(">> unexpected result=%d on second "
-                            "read_long(10)\n", r);
+                            "read_long(10)\n",
+                            r);
                 break;
             case SG_LIB_CAT_INVALID_OP:
                 pr2serr(">> read_long(10); not supported\n");
@@ -954,143 +957,136 @@ sg_read(int sg_fd, uint8_t * buff, int blocks, int64_t from_block,
             else
                 memset(bp, 0, bs);
             free(free_buffp);
-        } else {
+        }
+        else
+        {
             pr2serr(">> read_long(10) cannot handle blk=%" PRId64 ", use "
-                    "zeros\n", lba);
+                    "zeros\n",
+                    lba);
             memset(bp, 0, bs);
         }
         ++xferred;
         bp += bs;
         ++lba;
-        // if ((coe_limit > 0) && (++coe_count > coe_limit)) {
-        //     if (blks_readp)
-        //         *blks_readp = xferred + blks;
-        //     pr2serr(">> coe_limit on consecutive reads exceeded\n");
-        //     return SG_LIB_CAT_MEDIUM_HARD;
-        // }
     }
     if (blks_readp)
         *blks_readp = xferred;
     return 0;
 
 err_out:
-    if (ifp->coe) {
+    if (ifp->coe)
+    {
         memset(bp, 0, bs * blks);
         pr2serr(">> unable to read at blk=%" PRId64 " for %d bytes, use "
-                "zeros\n", lba, bs * blks);
+                "zeros\n",
+                lba, bs * blks);
         if (blks > 1)
             pr2serr(">>   try reducing bpt to limit number of zeros written "
                     "near bad block(s)\n");
         /* fudge success */
         if (blks_readp)
             *blks_readp = xferred + blks;
-        // if ((coe_limit > 0) && (++coe_count > coe_limit)) {
-        //     pr2serr(">> coe_limit on consecutive reads exceeded\n");
-        //     return ret;
-        // }
         return may_coe ? 0 : ret;
-    } else
+    }
+    else
         return ret;
 }
 
+/* 0 -> successful, SG_LIB_SYNTAX_ERROR -> unable to build cdb,
+   SG_LIB_CAT_NOT_READY, SG_LIB_CAT_UNIT_ATTENTION, SG_LIB_CAT_MEDIUM_HARD,
+   SG_LIB_CAT_ABORTED_COMMAND, -2 -> recoverable (ENOMEM),
+   -1 -> unrecoverable error + others */
+/*static int
+sg_write(int sg_fd, unsigned char * buff, int blocks, int64_t to_block,
+         int bs, const struct flags_t * ofp, int * diop)
+{
+    unsigned char wrCmd[MAX_SCSI_CDBSZ];
+    unsigned char senseBuff[SENSE_BUFF_LEN];
+    struct sg_io_hdr io_hdr;
+    int res, k, info_valid;
+    uint64_t io_addr = 0;
+    if (sg_build_scsi_cdb(wrCmd, ofp->cdbsz, blocks, to_block, 1, ofp->fua,
+                          ofp->dpo)) {
+        pr2serr(ME "bad wr cdb build, to_block=%" PRId64 ", blocks=%d\n",
+                to_block, blocks);
+        return SG_LIB_SYNTAX_ERROR;
+    }
+    memset(&io_hdr, 0, sizeof(struct sg_io_hdr));
+    io_hdr.interface_id = 'S';
+    io_hdr.cmd_len = ofp->cdbsz;
+    io_hdr.cmdp = wrCmd;
+    io_hdr.dxfer_direction = SG_DXFER_TO_DEV;
+    io_hdr.dxfer_len = bs * blocks;
+    io_hdr.dxferp = buff;
+    io_hdr.mx_sb_len = SENSE_BUFF_LEN;
+    io_hdr.sbp = senseBuff;
+    io_hdr.timeout = DEF_TIMEOUT;
+    io_hdr.pack_id = (int)to_block;
+    if (diop && *diop)
+        io_hdr.flags |= SG_FLAG_DIRECT_IO;
 
-// /* 0 -> successful, SG_LIB_SYNTAX_ERROR -> unable to build cdb,
-//    SG_LIB_CAT_NOT_READY, SG_LIB_CAT_UNIT_ATTENTION, SG_LIB_CAT_MEDIUM_HARD,
-//    SG_LIB_CAT_ABORTED_COMMAND, -2 -> recoverable (ENOMEM),
-//    -1 -> unrecoverable error + others */
-// static int
-// sg_write(int sg_fd, unsigned char * buff, int blocks, int64_t to_block,
-//          int bs, const struct flags_t * ofp, int * diop)
-// {
-//     unsigned char wrCmd[MAX_SCSI_CDBSZ];
-//     unsigned char senseBuff[SENSE_BUFF_LEN];
-//     struct sg_io_hdr io_hdr;
-//     int res, k, info_valid;
-//     uint64_t io_addr = 0;
+    if (verbose > 2) {
+        pr2serr("    write cdb: ");
+        for (k = 0; k < ofp->cdbsz; ++k)
+            pr2serr("%02x ", wrCmd[k]);
+        pr2serr("\n");
+    }
+    while (((res = ioctl(sg_fd, SG_IO, &io_hdr)) < 0) &&
+           ((EINTR == errno) || (EAGAIN == errno)))
+        ;
+    if (res < 0) {
+        if (ENOMEM == errno)
+            return -2;
+        perror("writing (SG_IO) on sg device, error");
+        return -1;
+    }
 
-//     if (sg_build_scsi_cdb(wrCmd, ofp->cdbsz, blocks, to_block, 1, ofp->fua,
-//                           ofp->dpo)) {
-//         pr2serr(ME "bad wr cdb build, to_block=%" PRId64 ", blocks=%d\n",
-//                 to_block, blocks);
-//         return SG_LIB_SYNTAX_ERROR;
-//     }
-
-//     memset(&io_hdr, 0, sizeof(struct sg_io_hdr));
-//     io_hdr.interface_id = 'S';
-//     io_hdr.cmd_len = ofp->cdbsz;
-//     io_hdr.cmdp = wrCmd;
-//     io_hdr.dxfer_direction = SG_DXFER_TO_DEV;
-//     io_hdr.dxfer_len = bs * blocks;
-//     io_hdr.dxferp = buff;
-//     io_hdr.mx_sb_len = SENSE_BUFF_LEN;
-//     io_hdr.sbp = senseBuff;
-//     io_hdr.timeout = DEF_TIMEOUT;
-//     io_hdr.pack_id = (int)to_block;
-//     if (diop && *diop)
-//         io_hdr.flags |= SG_FLAG_DIRECT_IO;
-
-//     if (verbose > 2) {
-//         pr2serr("    write cdb: ");
-//         for (k = 0; k < ofp->cdbsz; ++k)
-//             pr2serr("%02x ", wrCmd[k]);
-//         pr2serr("\n");
-//     }
-//     while (((res = ioctl(sg_fd, SG_IO, &io_hdr)) < 0) &&
-//            ((EINTR == errno) || (EAGAIN == errno)))
-//         ;
-//     if (res < 0) {
-//         if (ENOMEM == errno)
-//             return -2;
-//         perror("writing (SG_IO) on sg device, error");
-//         return -1;
-//     }
-
-//     if (verbose > 2)
-//         pr2serr("      duration=%u ms\n", io_hdr.duration);
-//     res = sg_err_category3(&io_hdr);
-//     switch (res) {
-//     case SG_LIB_CAT_CLEAN:
-//         break;
-//     case SG_LIB_CAT_RECOVERED:
-//         ++recovered_errs;
-//         info_valid = sg_get_sense_info_fld(io_hdr.sbp, io_hdr.sb_len_wr,
-//                                            &io_addr);
-//         if (info_valid) {
-//             pr2serr("    lba of last recovered error in this WRITE=0x%" PRIx64
-//                     "\n", io_addr);
-//             if (verbose > 1)
-//                 sg_chk_n_print3("writing", &io_hdr, 1);
-//         } else {
-//             pr2serr("Recovered error: [no info] writing to block=0x%" PRIx64
-//                     ", num=%d\n", to_block, blocks);
-//             sg_chk_n_print3("writing", &io_hdr, verbose > 1);
-//         }
-//         break;
-//     case SG_LIB_CAT_ABORTED_COMMAND:
-//     case SG_LIB_CAT_UNIT_ATTENTION:
-//         sg_chk_n_print3("writing", &io_hdr, verbose > 1);
-//         return res;
-//     case SG_LIB_CAT_NOT_READY:
-//         ++unrecovered_errs;
-//         pr2serr("device not ready (w)\n");
-//         return res;
-//     case SG_LIB_CAT_MEDIUM_HARD:
-//     default:
-//         sg_chk_n_print3("writing", &io_hdr, verbose > 1);
-//         ++unrecovered_errs;
-//         if (ofp->coe) {
-//             pr2serr(">> ignored errors for out blk=%" PRId64 " for %d "
-//                     "bytes\n", to_block, bs * blocks);
-//             return 0; /* fudge success */
-//         } else
-//             return res;
-//     }
-//     if (diop && *diop &&
-//         ((io_hdr.info & SG_INFO_DIRECT_IO_MASK) != SG_INFO_DIRECT_IO))
-//         *diop = 0;      /* flag that dio not done (completely) */
-//     return 0;
-// }
-
+    if (verbose > 2)
+        pr2serr("      duration=%u ms\n", io_hdr.duration);
+    res = sg_err_category3(&io_hdr);
+    switch (res) {
+    case SG_LIB_CAT_CLEAN:
+        break;
+    case SG_LIB_CAT_RECOVERED:
+        ++recovered_errs;
+        info_valid = sg_get_sense_info_fld(io_hdr.sbp, io_hdr.sb_len_wr,
+                                           &io_addr);
+        if (info_valid) {
+            pr2serr("    lba of last recovered error in this WRITE=0x%" PRIx64
+                    "\n", io_addr);
+            if (verbose > 1)
+                sg_chk_n_print3("writing", &io_hdr, 1);
+        } else {
+            pr2serr("Recovered error: [no info] writing to block=0x%" PRIx64
+                    ", num=%d\n", to_block, blocks);
+            sg_chk_n_print3("writing", &io_hdr, verbose > 1);
+        }
+        break;
+    case SG_LIB_CAT_ABORTED_COMMAND:
+    case SG_LIB_CAT_UNIT_ATTENTION:
+        sg_chk_n_print3("writing", &io_hdr, verbose > 1);
+        return res;
+    case SG_LIB_CAT_NOT_READY:
+        ++unrecovered_errs;
+        pr2serr("device not ready (w)\n");
+        return res;
+    case SG_LIB_CAT_MEDIUM_HARD:
+    default:
+        sg_chk_n_print3("writing", &io_hdr, verbose > 1);
+        ++unrecovered_errs;
+        if (ofp->coe) {
+            pr2serr(">> ignored errors for out blk=%" PRId64 " for %d "
+                    "bytes\n", to_block, bs * blocks);
+            return 0; // fudge success 
+        } else
+            return res;
+    }
+    if (diop && *diop &&
+        ((io_hdr.info & SG_INFO_DIRECT_IO_MASK) != SG_INFO_DIRECT_IO))
+        *diop = 0;      // flag that dio not done (completely) 
+    return 0;
+}
+*/
 
 static void
 calc_duration_throughput(int contin)
@@ -1099,12 +1095,14 @@ calc_duration_throughput(int contin)
     double a, b;
     int64_t blks;
 
-    if (start_tm_valid && (start_tm.tv_sec || start_tm.tv_usec)) {
+    if (start_tm_valid && (start_tm.tv_sec || start_tm.tv_usec))
+    {
         blks = (in_full > out_full) ? in_full : out_full;
         gettimeofday(&end_tm, NULL);
         res_tm.tv_sec = end_tm.tv_sec - start_tm.tv_sec;
         res_tm.tv_usec = end_tm.tv_usec - start_tm.tv_usec;
-        if (res_tm.tv_usec < 0) {
+        if (res_tm.tv_usec < 0)
+        {
             --res_tm.tv_sec;
             res_tm.tv_usec += 1000000;
         }
@@ -1126,14 +1124,14 @@ calc_duration_throughput(int contin)
  * (-SG_LIB_FILE_ERROR or -SG_LIB_CAT_OTHER) if error.
  */
 static int
-open_of(const char * outf, int64_t seek, int bpt, struct flags_t * ofp,
-        int * out_typep, int verbose)
+open_of(const char *outf, int64_t seek, int bpt, struct flags_t *ofp,
+        int *out_typep, int verbose)
 {
     int outfd, flags, t, verb, res;
     char ebuff[EBUFF_SZ];
     struct sg_simple_inquiry_resp sir;
 
-    verb = (verbose ? verbose - 1: 0);
+    verb = (verbose ? verbose - 1 : 0);
     *out_typep = dd_filetype(outf);
     if (verbose)
         pr2serr(" >> Output file type: %s\n",
@@ -1142,15 +1140,17 @@ open_of(const char * outf, int64_t seek, int bpt, struct flags_t * ofp,
     if ((FT_BLOCK & *out_typep) && ofp->sgio)
         *out_typep |= FT_SG;
 
-    if (FT_SG & *out_typep) {
+    if (FT_SG & *out_typep)
+    {
         flags = O_RDONLY | O_NONBLOCK;
-//        if (ofp->direct)
-//            flags |= O_DIRECT;
-//        if (ofp->excl)
-//            flags |= O_EXCL;
-//        if (ofp->dsync)
-//            flags |= O_SYNC;
-        if ((outfd = open(outf, flags)) < 0) {
+        //        if (ofp->direct)
+        //            flags |= O_DIRECT;
+        //        if (ofp->excl)
+        //            flags |= O_EXCL;
+        //        if (ofp->dsync)
+        //            flags |= O_SYNC;
+        if ((outfd = open(outf, flags)) < 0)
+        {
             snprintf(ebuff, EBUFF_SZ,
                      ME "could not open %s for sg writing", outf);
             perror(ebuff);
@@ -1158,7 +1158,8 @@ open_of(const char * outf, int64_t seek, int bpt, struct flags_t * ofp,
         }
         if (verbose)
             pr2serr("        open output(sg_io), flags=0x%x\n", flags);
-        if (sg_simple_inquiry(outfd, &sir, 0, verb)) {
+        if (sg_simple_inquiry(outfd, &sir, 0, verb))
+        {
             pr2serr("INQUIRY failed on %s\n", outf);
             goto other_err;
         }
@@ -1166,26 +1167,31 @@ open_of(const char * outf, int64_t seek, int bpt, struct flags_t * ofp,
         if (verbose)
             pr2serr("    %s: %.8s  %.16s  %.4s  [pdt=%d]\n", outf, sir.vendor,
                     sir.product, sir.revision, ofp->pdt);
-        if (! (FT_BLOCK & *out_typep)) {
+        if (!(FT_BLOCK & *out_typep))
+        {
             t = blk_sz * bpt;
             res = ioctl(outfd, SG_SET_RESERVED_SIZE, &t);
             if (res < 0)
                 perror(ME "SG_SET_RESERVED_SIZE error");
             res = ioctl(outfd, SG_GET_VERSION_NUM, &t);
-            if ((res < 0) || (t < 30000)) {
+            if ((res < 0) || (t < 30000))
+            {
                 pr2serr(ME "sg driver prior to 3.x.y\n");
                 goto file_err;
             }
         }
     }
     else
-    	outfd = -1;
-    if (ofp->flock) {
+        outfd = -1;
+    if (ofp->flock)
+    {
         res = flock(outfd, LOCK_EX | LOCK_NB);
-        if (res < 0) {
+        if (res < 0)
+        {
             close(outfd);
             snprintf(ebuff, EBUFF_SZ, ME "flock(LOCK_EX | LOCK_NB) on %s "
-                     "failed", outf);
+                                         "failed",
+                     outf);
             perror(ebuff);
             return -SG_LIB_FLOCK_ERR;
         }
@@ -1198,66 +1204,61 @@ other_err:
     return -SG_LIB_CAT_OTHER;
 }
 
-
-typedef enum {
-	WIPEMODE_NORMAL,
-	WIPEMODE_DOD,
-	WIPEMODE_DOD7,
-	WIPEMODE_GUTMANN,
-	WIPEMODE_DOE,
-	WIPEMODE_SCHNEIER,
-	WIPEMODE_BCI,
-	WIPEMODE_JEFFERY
+typedef enum
+{
+    WIPEMODE_NORMAL,
+    WIPEMODE_JEFFERY
 } WipeMode;
 
-
-struct _opt {
-	unsigned int	passes;
-	WipeMode		mode;
-	bool			yes;
-	unsigned int	sectors;
-	int64_t			start;
-	int64_t			end;
-	bool			read;
-	unsigned int	help;
-	bool			kilobyte;
-	unsigned int	refresh;
-	bool			ignore;
-	bool			checksum;
-	int 			nretries;
+struct _opt
+{
+    unsigned int passes;
+    WipeMode mode;
+    bool yes;
+    unsigned int sectors;
+    int64_t start;
+    int64_t end;
+    bool read;
+    unsigned int help;
+    bool kilobyte;
+    unsigned int refresh;
+    bool ignore;
+    bool checksum;
+    int nretries;
 };
 
 typedef struct _opt t_opt;
 
 static t_opt opt = {
-	0,					/* passes */
-	WIPEMODE_NORMAL,	/* normal, dod, dod7, gutmann */
-	false,				/* yes */
-	DEF_BLOCKS_PER_TRANSFER,	/* sectors */
-	0,					/* start */
-	0,					/* end */
-	false,				/* read */
-	0,					/* help */
-	false,				/* kilobyte */
-	5,					/* refresh */
-	false,				/* ignore */
-	false,				/* check sum calc */
-	2,					/* nRetry if write error.*/
+    0,                       /* passes */
+    WIPEMODE_NORMAL,         /* normal, dod, dod7, gutmann */
+    false,                   /* yes */
+    DEF_BLOCKS_PER_TRANSFER, /* sectors */
+    0,                       /* start */
+    0,                       /* end */
+    false,                   /* read */
+    0,                       /* help */
+    false,                   /* kilobyte */
+    5,                       /* refresh */
+    false,                   /* ignore */
+    false,                   /* check sum calc */
+    2,                       /* nRetry if write error.*/
 };
 
-struct _stats {
-	char			*device_name;
-	unsigned int	bytes_per_sector;
+struct _stats
+{
+    char *device_name;
+    unsigned int bytes_per_sector;
 
-	int64_t			start_ticks;
-	struct tm		lpStartTime;
-	char			start_time[20];
-	int64_t			wiping_ticks;
+    int64_t start_ticks;
+    struct tm lpStartTime;
+    char start_time[20];
+    int64_t wiping_ticks;
 
-	int64_t			all_start_ticks;
-	int64_t			all_wiping_ticks;
+    int64_t all_start_ticks;
+    int64_t all_wiping_ticks;
 
-	int64_t			passwiping_ticks;
+    int64_t passwiping_ticks;
 };
 
 typedef struct _stats t_stats;
@@ -1265,677 +1266,500 @@ typedef struct _stats t_stats;
 static int64_t
 get_ticks(t_stats *stats)
 {
-	struct timeval tm;
-	tm.tv_sec = 0;
-	tm.tv_usec = 0;
-	gettimeofday(&tm, NULL);
-	return tm.tv_sec;
+    struct timeval tm;
+    tm.tv_sec = 0;
+    tm.tv_usec = 0;
+    gettimeofday(&tm, NULL);
+    return tm.tv_sec;
 }
 
-static char *seconds_to_hhmmss(uint seconds, char *rv, int bufsiz) {
-	uint hours = seconds / 3600;
-	seconds -= hours * 3600;
+static char *seconds_to_hhmmss(uint seconds, char *rv, int bufsiz)
+{
+    uint hours = seconds / 3600;
+    seconds -= hours * 3600;
 
-	uint minutes = seconds / 60;
-	seconds -= minutes * 60;
+    uint minutes = seconds / 60;
+    seconds -= minutes * 60;
 
-	if (hours > 99) {
-		uint days = hours / 24;
-		hours -= days * 24;
-		if (days > 99) {
-			snprintf(rv, bufsiz, "%03dd %02dh", days, hours);
-			return rv;
-		}
-		snprintf(rv, bufsiz, "%02dd%02d%02d", days, hours, minutes);
-		return rv;
-	}
+    if (hours > 99)
+    {
+        uint days = hours / 24;
+        hours -= days * 24;
+        if (days > 99)
+        {
+            snprintf(rv, bufsiz, "%03dd %02dh", days, hours);
+            return rv;
+        }
+        snprintf(rv, bufsiz, "%02dd%02d%02d", days, hours, minutes);
+        return rv;
+    }
 
-	snprintf(rv, bufsiz, "%02d:%02d:%02d", hours, minutes, seconds);
+    snprintf(rv, bufsiz, "%02d:%02d:%02d", hours, minutes, seconds);
 
-	return rv;
+    return rv;
 }
-
 
 static void print_stats(unsigned int pass, char *s_byte, int64_t sector, t_stats *stats, int passescnt)
 {
-	int64_t starting_sector = opt.start;
-	int64_t ending_sector = opt.end;
+    int64_t starting_sector = opt.start;
+    int64_t ending_sector = opt.end;
 
-	int64_t done_sectors	= (ending_sector * ((int64_t) pass - 1)) + sector;
-	int64_t total_sectors = ending_sector * (passescnt);
+    int64_t done_sectors = (ending_sector * ((int64_t)pass - 1)) + sector;
+    int64_t total_sectors = ending_sector * (passescnt);
 
-	int64_t single_sectors = sector;
-	//int64_t single_total_sectors = ending_sector * 1;
+    int64_t single_sectors = sector;
+    //int64_t single_total_sectors = ending_sector * 1;
 
+    double all_pct = (double)(int64_t)done_sectors / (double)(int64_t)total_sectors * 100.0;
+    //double single_pct = (double)(int64_t)single_sectors / (double)(int64_t)single_total_sectors * 100.0;
 
-	double all_pct = (double) (int64_t) done_sectors / (double) (int64_t) total_sectors * 100.0;
-	//double single_pct = (double)(int64_t)single_sectors / (double)(int64_t)single_total_sectors * 100.0;
+    int64_t remaining_ticks = 0;
 
-	int64_t remaining_ticks = 0;
+    int64_t elapsed_ticks = get_ticks(stats) - stats->start_ticks;
 
-	int64_t elapsed_ticks = get_ticks(stats) - stats->start_ticks;
+    if (done_sectors)
+    {
+        remaining_ticks = (int64_t)(((double)(int64_t)((total_sectors - done_sectors) / (double)(int64_t)done_sectors) * elapsed_ticks));
+    }
 
-	if (done_sectors) {
-		remaining_ticks = (int64_t)(((double)(int64_t)((total_sectors - done_sectors) / (double)(int64_t)done_sectors) * elapsed_ticks));
-	}
+    double kilo = opt.kilobyte ? 1024.0 : 1000.0;
 
-	double kilo = opt.kilobyte ? 1024.0 : 1000.0;
+    double mb_sec = 0;
+    double mb_sec_single = 0;
+    double secondspass = 0;
 
-	double mb_sec = 0;
-	double mb_sec_single = 0;
-	double secondspass = 0;
+    if (stats->wiping_ticks)
+    {
+        int64_t bytes = done_sectors * stats->bytes_per_sector;
+        double megabytes = (double)(int64_t)bytes / (kilo * kilo);
+        double seconds = (double)(int64_t)stats->wiping_ticks;
 
+        int64_t bytessingle = single_sectors * stats->bytes_per_sector;
+        double megabytessingle = (double)(int64_t)bytessingle / (kilo * kilo);
+        secondspass = (double)(int64_t)stats->passwiping_ticks;
 
-	if (stats->wiping_ticks) {
-		int64_t bytes = done_sectors * stats->bytes_per_sector;
-		double megabytes = (double) (int64_t) bytes / (kilo * kilo);
-		double seconds = (double) (int64_t) stats->wiping_ticks;
+        //printf("\nsector=%20I64d done_sectors=%20I64d bytes=%20I64d megabytes=%20.10f seconds=%20.10f\n", sector, done_sectors, bytes, megabytes, seconds);
+        if (seconds > 0)
+        {
+            mb_sec = megabytes / seconds;
+        }
+        if (secondspass > 0)
+        {
+            mb_sec_single = megabytessingle / secondspass;
+        }
+    }
 
-		int64_t bytessingle = single_sectors * stats->bytes_per_sector;
-		double megabytessingle = (double)(int64_t)bytessingle / (kilo * kilo);
-		secondspass = (double)(int64_t)stats->passwiping_ticks;
+    sector -= starting_sector;
+    ending_sector -= starting_sector;
 
-		//printf("\nsector=%20I64d done_sectors=%20I64d bytes=%20I64d megabytes=%20.10f seconds=%20.10f\n", sector, done_sectors, bytes, megabytes, seconds);
-		if (seconds > 0) {
-			mb_sec = megabytes / seconds;
-		}
-		if (secondspass > 0){
-			mb_sec_single = megabytessingle / secondspass;
-		}
-	}
+    double this_pct = (double)(int64_t)sector / (double)(int64_t)ending_sector * 100.0;
 
-	sector -= starting_sector;
-	ending_sector -= starting_sector;
+    if (sector >= ending_sector)
+    {
+        this_pct = 100.0;
+        all_pct = (double)(pass)*100.0 / (double)passescnt;
+        if (pass >= opt.passes)
+        {
+            this_pct = 100.0;
+            all_pct = 100.0;
+            remaining_ticks = 0;
+        }
+    }
 
-	double this_pct = (double) (int64_t) sector / (double) (int64_t) ending_sector * 100.0;
+    char consume_time[255];
+    seconds_to_hhmmss((uint)secondspass, consume_time, sizeof(consume_time));
 
-	if (sector >= ending_sector) {
-		this_pct = 100.0;
-		all_pct = (double)(pass)* 100.0 / (double)passescnt;
-		if (pass >= opt.passes) {
-			this_pct = 100.0;
-			all_pct = 100.0;
-			remaining_ticks = 0;
-		}
-	}
+    uint remaining_seconds = (uint)(remaining_ticks);
 
-	char consume_time[255];
-	seconds_to_hhmmss((uint)secondspass, consume_time, sizeof(consume_time));
+    char remaining_time[255];
+    seconds_to_hhmmss(remaining_seconds, remaining_time, sizeof(remaining_time));
 
+    uint elapsed_seconds = (uint)(elapsed_ticks);
 
-	uint remaining_seconds = (uint) (remaining_ticks);
+    char elapsed_time[255];
+    seconds_to_hhmmss(elapsed_seconds, elapsed_time, sizeof(elapsed_time));
 
-	char remaining_time[255];
-	seconds_to_hhmmss(remaining_seconds, remaining_time, sizeof(remaining_time));
+    double dbsec = mb_sec;
+    if (dbsec < 1)
+        dbsec = 1;
+    int64_t tems = (int64_t)((double)(int64_t)(total_sectors * stats->bytes_per_sector) / (kilo * kilo) / (dbsec));
 
-	uint elapsed_seconds = (uint) (elapsed_ticks );
+    char finish_time[255] = {0};
+    snprintf(finish_time, sizeof(finish_time), "%08" PRId64, tems);
 
-	char elapsed_time[255];
-	seconds_to_hhmmss(elapsed_seconds, elapsed_time, sizeof(elapsed_time));
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "%.3f%% - %s - %s - %s", all_pct, remaining_time, stats->device_name, progname);
 
-	double dbsec = mb_sec;
-	if (dbsec < 1) dbsec = 1;
-	int64_t tems = (int64_t)((double)(int64_t)(total_sectors * stats->bytes_per_sector) / (kilo * kilo) / (dbsec));
-
-	char finish_time[255] = { 0 };
-	snprintf(finish_time, sizeof(finish_time), "%08" PRId64, tems);
-
-	char buf[1024];
-	snprintf(buf, sizeof(buf), "%.3f%% - %s - %s - %s", all_pct, remaining_time, stats->device_name, progname);
-
-	printf(FORMAT_STRING,
-		pass,
-		passescnt,
-		s_byte,
-		this_pct,
-		all_pct,
-		elapsed_time,
-		consume_time,//remaining_time,
-		stats->start_time,
-		finish_time,
-		mb_sec,
-		mb_sec_single);
-	fflush(stdout);
+    printf(FORMAT_STRING,
+           pass,
+           passescnt,
+           s_byte,
+           this_pct,
+           all_pct,
+           elapsed_time,
+           consume_time, //remaining_time,
+           stats->start_time,
+           finish_time,
+           mb_sec,
+           mb_sec_single);
+    fflush(stdout);
 }
-
-// static int
-// CheckSumCount(int bytes, int *byte)
-// {
-// 	int nCount = 0;
-// 	int n = 0;
-// 	for (unsigned int pass = 1; pass <= opt.passes; ++pass) {
-// 		int byte_to_write = 0;
-// 		switch (opt.mode) {
-// 		case WIPEMODE_NORMAL:
-// 			if (bytes == 0) {
-// 				byte_to_write = 0;
-// 			}
-// 			else {
-// 				n = (pass - 1) % bytes;
-// 				byte_to_write = byte[n];
-// 			}
-
-// 			break;
-
-// 		case WIPEMODE_JEFFERY:
-// 			break;
-
-// 		}
-// 		if (byte_to_write == CHECKDATAFLAG)
-// 		{
-// 			nCount++;
-// 		}
-// 	}
-// 	return nCount;
-// }
 
 static int
 read_verify_device(char *device_name, int bytes, int *byte, t_stats *stats)
 {
-	stats->start_ticks = get_ticks(stats);
-	stats->wiping_ticks = 0;
+    stats->start_ticks = get_ticks(stats);
+    stats->wiping_ticks = 0;
 
-	stats->device_name = device_name;
+    stats->device_name = device_name;
 
-	stats->bytes_per_sector = DEF_BLOCK_SIZE;
+    stats->bytes_per_sector = DEF_BLOCK_SIZE;
 
-	int bpt = DEF_BLOCKS_PER_TRANSFER;
-	int out_type = FT_OTHER;
-	int outfd, retries_tmp=5;
+    int bpt = DEF_BLOCKS_PER_TRANSFER;
+    int out_type = FT_OTHER;
+    int outfd, retries_tmp = 5;
     int64_t out_num_sect = -1;
     int out_sect_sz;
     int res = 0;
 
-	outfd = open_of(device_name, opt.start, bpt, &oflag, &out_type, verbose);
-	if (outfd < -1)
-	   return -outfd;
+    outfd = open_of(device_name, opt.start, bpt, &oflag, &out_type, verbose);
+    if (outfd < 0)
+    {
+        pr2serr("outfd=%d\n", outfd);
+        return -outfd;
+    }
 
     out_num_sect = -1;
     out_sect_sz = -1;
-    if (FT_SG & out_type) {
+    if (FT_SG & out_type)
+    {
         res = scsi_read_capacity(outfd, &out_num_sect, &out_sect_sz);
-        if (SG_LIB_CAT_UNIT_ATTENTION == res) {
+        if (SG_LIB_CAT_UNIT_ATTENTION == res)
+        {
             pr2serr("Unit attention (readcap out), continuing\n");
             res = scsi_read_capacity(outfd, &out_num_sect, &out_sect_sz);
-        } else if (SG_LIB_CAT_ABORTED_COMMAND == res) {
+        }
+        else if (SG_LIB_CAT_ABORTED_COMMAND == res)
+        {
             pr2serr("Aborted command (readcap out), continuing\n");
             res = scsi_read_capacity(outfd, &out_num_sect, &out_sect_sz);
         }
-        if (0 != res) {
+        if (0 != res)
+        {
             if (res == SG_LIB_CAT_INVALID_OP)
                 pr2serr("read capacity not supported on %s\n", device_name);
             else
                 pr2serr("Unable to read capacity on %s\n", device_name);
             out_num_sect = -1;
-        } else if (blk_sz != out_sect_sz){
+        }
+        else if (blk_sz != out_sect_sz)
+        {
             pr2serr(">> warning: block size on %s confusion: bs=%d, "
-                    "device claims=%d\n", device_name, blk_sz, out_sect_sz);
+                    "device claims=%d\n",
+                    device_name, blk_sz, out_sect_sz);
             blk_sz = out_sect_sz;
             stats->bytes_per_sector = blk_sz;
         }
-    }//MUST is FT_SG support. other not support
+    } //MUST is FT_SG support. other not support
 
-    pr2serr("Start, out_num_sect=%" PRId64 ",block size=%d\n", out_num_sect,out_sect_sz);
-	if (opt.end > out_num_sect) {
-		pr2serr("Ending sector must be less than or equal to %" PRId64 " for %s", out_num_sect, device_name);
-		exit(-2);
-	}
-	if (opt.end == 0) {
-		opt.end = out_num_sect;
-	}
+    pr2serr("Start, out_num_sect=%" PRId64 ",block size=%d\n", out_num_sect, out_sect_sz);
+    if (opt.end > out_num_sect)
+    {
+        pr2serr("Ending sector must be less than or equal to %" PRId64 " for %s", out_num_sect, device_name);
+        exit(-2);
+    }
+    if (opt.end == 0)
+    {
+        opt.end = out_num_sect;
+    }
 
     if (out_num_sect > opt.start)
         out_num_sect -= opt.start;
 
+    if (opt.start > opt.end)
+    {
+        pr2serr("Ending sector must be greater than starting sector");
+        exit(-2);
+    }
 
-	if (opt.start > opt.end) {
-		pr2serr("Ending sector must be greater than starting sector");
-		exit(-2);
-	}
+    time_t t = time(NULL);
+    stats->lpStartTime = *localtime(&t);
+    snprintf(stats->start_time, sizeof(stats->start_time), "%02d:%02d:%02d", stats->lpStartTime.tm_hour, stats->lpStartTime.tm_min, stats->lpStartTime.tm_sec);
+    uint64_t last_ticks = get_ticks(stats);
 
-	time_t t = time(NULL);
-	stats->lpStartTime= *localtime(&t);
-	snprintf(stats->start_time, sizeof(stats->start_time), "%02d:%02d:%02d", stats->lpStartTime.tm_hour, stats->lpStartTime.tm_min, stats->lpStartTime.tm_sec);
-	uint64_t last_ticks = get_ticks(stats);
+    printf(HEADER, opt.kilobyte ? " MiB" : "MB", opt.kilobyte ? " MiB" : "MB");
+    unsigned char chars[3] = {0};
+    int byte_to_write = byte[0];
+    for (int j = 0; j < BYTES_PER_ELEMENT; ++j)
+    {
+        chars[j] = (unsigned char)byte_to_write;
+    }
+    unsigned int bytes_to_process = opt.sectors * stats->bytes_per_sector;
+    unsigned char *sector_data = (unsigned char *)malloc(bytes_to_process + BYTES_PER_ELEMENT);
+    unsigned char *check_data = (unsigned char *)malloc(bytes_to_process + BYTES_PER_ELEMENT);
+    memset(check_data, byte[0], bytes_to_process + BYTES_PER_ELEMENT);
+    memset(sector_data, byte[0], bytes_to_process + BYTES_PER_ELEMENT);
 
-	printf(HEADER, opt.kilobyte ? " MiB" : "MB", opt.kilobyte ? " MiB" : "MB");
+    bool bRetryerror = false;
 
-	unsigned int bytes_to_process = opt.sectors * stats->bytes_per_sector;
-	unsigned char *sector_data = (unsigned char *) malloc(bytes_to_process + BYTES_PER_ELEMENT);
+    for (unsigned int pass = 1; pass <= opt.passes; ++pass)
+    {
+        unsigned int n;
 
-	// int nCheckCount = 0;
-	// int CheckSumPasses = CheckSumCount(bytes, byte);
+        stats->passwiping_ticks = 0;
 
-	bool bRetryerror = false;
+        char s_byte[5];
+        sprintf(s_byte, "0x%02X", chars[0]);
 
-	for (unsigned int pass = 1; pass <= opt.passes; ++pass)
-	{
-		int byte_to_write = 0;
-		int j;
-		unsigned char chars[3]={0};
-		unsigned int n;
+        unsigned long sectors_to_process = opt.sectors;
 
-		stats->passwiping_ticks = 0;
+        int buf_sz, dio_tmp, first, blocks_per;
+        int64_t seek = opt.start;
+        int dio_incomplete = 0;
+        retries_tmp = opt.nretries;
 
+        for (int64_t sector = opt.start; sector <= opt.end; sector += opt.sectors)
+        {
+            if (sector + sectors_to_process > opt.end)
+            {
+                sectors_to_process = (unsigned long)(opt.end - sector);
+                if (sectors_to_process == 0)
+                {
+                    fprintf(stderr, "sector				=%" PRIx64 "\n", sector);
+                    break;
+                }
+            }
 
-		switch (opt.mode) {
-			case WIPEMODE_NORMAL:
-				if (bytes == 0) {
-					byte_to_write = 0;
-				} else {
-					int n = (pass - 1) % bytes;
-					byte_to_write = byte[n];
-					
-				}
+            uint64_t before_ticks = get_ticks(stats);
+            if (FT_SG & out_type)
+            {
+                // dio_tmp = oflag.dio;
+                bool diop;
+                first = 1;
+                while (1)
+                {
+                    //res = sg_write(outfd, sector_data, sectors_to_process, seek, blk_sz,
+                    //    &oflag, &dio_tmp);
+                    int blks_readp = 0;
+                    res = sg_read(outfd, sector_data, sectors_to_process, seek, blk_sz,
+                                  &oflag, &diop, &blks_readp);
+                    if (-2 == res)
+                    { /* ENOMEM, find what's available+try that */
+                        if (ioctl(outfd, SG_GET_RESERVED_SIZE, &buf_sz) < 0)
+                        {
+                            perror("RESERVED_SIZE ioctls failed");
+                            break;
+                        }
+                        if (buf_sz < MIN_RESERVED_SIZE)
+                            buf_sz = MIN_RESERVED_SIZE;
+                        blocks_per = (buf_sz + blk_sz - 1) / blk_sz;
+                        if (blocks_per < sectors_to_process)
+                        {
+                            sectors_to_process = blocks_per;
+                            pr2serr("Reducing read to %d blocks per loop\n",
+                                    blocks_per);
+                            res = sg_read(outfd, sector_data, sectors_to_process, seek, blk_sz,
+                                          &iflag, &diop, &blks_readp);
+                        }
+                    }
+                    if (res)
+                    {
+                        pr2serr("sg_read failed,%s at or after lba=%" PRId64 " [0x%" PRIx64 "]\n", ((-2 == res) ? " try reducing bpt," : ""), seek, seek);
+                        break;
+                    }
+                    first = 0;
+                }
+            }
+            seek += sectors_to_process;
 
-				for (j = 0; j < BYTES_PER_ELEMENT; ++j) {
-					chars[j] = (unsigned char) byte_to_write;
-				}
-				break;
+            uint64_t after_ticks = get_ticks(stats);
+            stats->wiping_ticks += after_ticks - before_ticks;
+            stats->passwiping_ticks += after_ticks - before_ticks;
 
+            uint64_t seconds = (after_ticks - last_ticks);
+            if (seconds >= opt.refresh && res == 0)
+            {
+                last_ticks = after_ticks;
+                // print_stats(pass - nCheckCount, s_byte, sector, stats, opt.passes - CheckSumPasses);
+                print_stats(pass, s_byte, sector, stats, opt.passes);
+            }
+        }
+        if (res != 0)
+        {
+            if (retries_tmp > 0 && bRetryerror)
+            {
+                bRetryerror = false;
+                pass--;
+                continue;
+            }
+            else
+                break;
+        }
+        // print_stats(pass - nCheckCount, s_byte, opt.end, stats, opt.passes - CheckSumPasses);
+        print_stats(pass, s_byte, opt.end, stats, opt.passes);
+    }
+    free(sector_data);
+    free(check_data);
+    close(outfd);
 
-		}
-
-		// if (byte_to_write == CHECKDATAFLAG)
-		// {
-		// 	nCheckCount++;
-		// 	//check_device(hnd, last_sector, stats);
-		// 	continue;
-		// }
-
-		char s_byte[5];
-
-		unsigned long sectors_to_process = opt.sectors;
-
-		int buf_sz, dio_tmp, first, blocks_per;
-		int64_t seek = opt.start;
-		int dio_incomplete = 0;
-		retries_tmp = opt.nretries;
-
-		for (int64_t sector = opt.start; sector <= opt.end; sector += opt.sectors)
-		{
-			if (sector + sectors_to_process > opt.end)
-			{
-				sectors_to_process = (unsigned long) (opt.end - sector);
-				if (sectors_to_process == 0)
-				{
-					fprintf(stderr, "sector				=%" PRIx64 "\n", sector);
-					break;
-				}
-			}
-
-			uint64_t before_ticks = get_ticks(stats);
-			if (FT_SG & out_type)
-			{
-				// dio_tmp = oflag.dio;
-				bool diop;
-				first = 1;
-				while (1) {
-					//res = sg_write(outfd, sector_data, sectors_to_process, seek, blk_sz,
-								//    &oflag, &dio_tmp);
-					int blks_readp = 0;
-					res = sg_read(outfd, sector_data, sectors_to_process,  seek, blk_sz,
-							&oflag, &diop, &blks_readp);
-					if (0 == res)
-						break;
-					if ((SG_LIB_CAT_NOT_READY == res) || (SG_LIB_SYNTAX_ERROR == res)){
-						pr2serr("SG_LIB_CAT_NOT_READY  failed %d\n", res);
-						break;
-					} else if ((-2 == res) && first) {
-						/* ENOMEM: find what's available and try that */
-						if (ioctl(outfd, SG_GET_RESERVED_SIZE, &buf_sz) < 0) {
-							perror("RESERVED_SIZE ioctls failed");
-							break;
-						}
-						if (buf_sz < MIN_RESERVED_SIZE)
-							buf_sz = MIN_RESERVED_SIZE;
-						blocks_per = (buf_sz + blk_sz - 1) / blk_sz;
-						if (blocks_per < sectors_to_process) {
-							sectors_to_process = blocks_per;
-							pr2serr("Reducing write to %d blocks per loop\n",
-									(int)sectors_to_process);
-							res = 0;
-						} else
-							break;
-					} else if ((SG_LIB_CAT_UNIT_ATTENTION == res) && first) {
-						if (--max_uas > 0)
-						{
-							pr2serr("Unit attention, continuing (w)\n");
-							sleep(4);
-							res = 0;
-							break;
-						}
-						else {
-							pr2serr("Unit attention, too many (w)\n");
-							break;
-						}
-					} else if ((SG_LIB_CAT_ABORTED_COMMAND == res) && first) {
-						if (--max_aborted > 0)
-						{
-							pr2serr("Aborted command, continuing (w)\n");
-							res = 0;
-						}
-						else {
-							pr2serr("Aborted command, too many (w)\n");
-							break;
-						}
-					} else //if (res < 0)
-					{
-						pr2serr("other  failed %d\n", res);
-						break;
-
-					}
-					/*else if (retries_tmp > 0) {
-						pr2serr(">>> retrying a sgio write, lba=0x%" PRIx64 "\n",	seek);
-						--retries_tmp;
-						++num_retries;
-						sleep(500);
-						if (unrecovered_errs > 0)
-							--unrecovered_errs;
-
-						if(fcntl(outfd,F_GETFD) == -1) break;
-					}*/ //else
-						//break;
-					first = 0;
-				}
-				if (0 != res) {
-					pr2serr("sg_write failed errorcode=%d,%s seek=%" PRId64 "\n",
-							res, ((-2 == res) ? " try reducing bpt," : ""), seek);
-					retries_tmp--;
-					if((res == SG_LIB_CAT_TIMEOUT ||res == SG_LIB_CAT_OTHER) &&  retries_tmp > 0)//Host_status=0x0b [DID_SOFT_ERROR]
-					{
-
-						bRetryerror = true;
-						int Retrycount = 10;
-						sleep(2);
-						while (ioctl(outfd, SG_GET_RESERVED_SIZE, &buf_sz) < 0) {
-							pr2serr("SG_GET_RESERVED_SIZE  =%d failed.\n", buf_sz);
-							sleep(1);
-							if (Retrycount-- == 0)
-								break;
-						}
-						if(Retrycount>0) {
-							bRetryerror = false;
-							res = 0;
-						}
-					}
-					else
-						bRetryerror = false;
-				} else {
-					out_full += sectors_to_process;
-					if (oflag.dio && (0 == dio_tmp))
-						dio_incomplete++;
-				}
-			}
-			else if (FT_DEV_NULL & out_type)
-			{
-				out_full += sectors_to_process; /* act as if written out without error */
-			}
-
-	        seek += sectors_to_process;
-
-	        uint64_t after_ticks = get_ticks(stats);
-	        stats->wiping_ticks += after_ticks - before_ticks;
-	        stats->passwiping_ticks += after_ticks - before_ticks;
-
-	        uint64_t seconds = (after_ticks - last_ticks);
-	        if (seconds >= opt.refresh && res == 0)
-	        {
-	        	last_ticks = after_ticks;
-	        	// print_stats(pass - nCheckCount, s_byte, sector, stats, opt.passes - CheckSumPasses);
-	        	print_stats(pass, s_byte, sector, stats, opt.passes);
-	        }
-		}
-		if(res != 0){
-			if( retries_tmp>0 && bRetryerror){
-				bRetryerror = false;
-				pass--;
-				continue;
-			}
-			else break;
-		}
-		// print_stats(pass - nCheckCount, s_byte, opt.end, stats, opt.passes - CheckSumPasses);
-		print_stats(pass, s_byte, opt.end, stats, opt.passes);
-	}
-	free(sector_data);
-	close(outfd);
-
-	return res;
+    return res;
 }
 
-int
-main(int argc, char * argv[])
+int main(int argc, char *argv[])
 {
-	version();
-	progname = basename(argv[0]);
+    version();
+    progname = basename(argv[0]);
 
-	opterr = 0;
-	int option_index = 0;
-	optind = 1;
-	int ret = 0;
+    opterr = 0;
+    int option_index = 0;
+    optind = 1;
+    int ret = 0;
+    int patten[1] = {0};
+    int byte_to_write = 0;
 
-	while (true) {
-		int c = getopt_long(argc, argv, short_options, long_options, &option_index);
+    while (true)
+    {
+        int c = getopt_long(argc, argv, short_options, long_options, &option_index);
 
-		if (c == -1)
-			break;
+        if (c == -1)
+            break;
 
-		switch (c) {
-			case 'w':
-				opt.mode = WIPEMODE_JEFFERY;
-				
-				break;
-			// case 'p': /* -p | --passes n  Wipe device n times (default is 1) */
-			// 	opt.passes = atoi(optarg);
-			// 	if (opt.passes == 0 || opt.passes >= 10000)
-			// 		usage(1);
-			// 	break;
-			// case 'd': /* -d | --dod       Wipe device using DoD 5220.22-M method (3 passes) */
-			// 	opt.mode = WIPEMODE_DOD;
-			// 	break;
-			// case 'D': /* -D | --dod7      Wipe device using DoD 5200.28-STD method (7 passes) */
-			// 	opt.mode = WIPEMODE_DOD7;
-			// 	break;
-			// case 'g': /* -g | --gutmann   Wipe device using Gutmann method (35 passes) */
-			// 	opt.mode = WIPEMODE_GUTMANN;
-			// 	break;
-			// case 'E': /* -E | --doe       Wipe device using US DoE method (3 passes) */
-			// 	opt.mode = WIPEMODE_DOE;
-			// 	break;
-			// case 'S': /* -S | --schneier  Wipe device using Bruce Schneier's method (7 passes) */
-			// 	opt.mode = WIPEMODE_SCHNEIER;
-			// 	break;
-			// case 'b': /* -b | --bci       Wipe device using German BCI/VSITR method (7 passes) */
-			// 	opt.mode = WIPEMODE_BCI;
-			// 	break;
-			// case 'y':
-			// 	opt.yes = true;
-			// 	break;
-			// case 'i':
-			// 	opt.ignore = true;
-			// 	break;
-			case 'k':
-				opt.kilobyte = true;
-				break;
-			case 'z':
-				opt.refresh = atoi(optarg);
-				break;
-			case 'V':
-				verbose = atoi(optarg);
-				break;
-			case 'R':
-				opt.nretries = atoi(optarg);
-				break;
-			case 'n': /* -n | --sectors n Write n sectors at once (default is %d) */
-				opt.sectors = atoi(optarg);
-				if (opt.sectors == 0)
-					usage(1);
-				if (opt.sectors >= 0x100000)
-					usage(1);
-				break;
-			case 's': // -s | --start   n Start at sector n (default is first sector)
-				opt.start = strtoull(optarg, (char **)NULL, 10);
-				if (opt.start == (int64_t) -1)
-					usage(1);
-				break;
-			case 'e': // -e | --end     n End at sector n (default is last sector)
-				opt.end = strtoull(optarg, (char **)NULL, 10);
-				if (opt.end == 0)
-					usage(1);
-				break;
-			// case 'r': /* -r | --read      Only read the data on the device (DOES NOT WIPE!) */
-			// 	opt.read = true;
-			// 	break;
-			case 'v': /* -v | --version   Show version and copyright information and quit */
-				version();
-				exit(0);
-				break;
-			case '?': /* -? | --help      Show this help message and quit */
-				++opt.help;
-				break;
-			case ':':
-				fprintf(stderr, "Option -%c requires an operand\n", optopt);
-				break;
-			default:
-				usage(1);
-		}
-	}
+        switch (c)
+        {
+        case 'p':
+            if (strncasecmp(optarg, "0x", 2) == 0)
+            {
+                if (sscanf(optarg, "%x", &byte_to_write) == 0)
+                {
+                    usage(1);
+                }
+                break;
+            }
 
-	if (opt.help) {
-		_usage();
-		if (opt.help > 1) {
-			// examples();
-		}
-		exit(0);
-	}
+            if (optarg[0] == '0')
+            {
+                if (sscanf(optarg, "%o", &byte_to_write) == 0)
+                {
+                    usage(1);
+                }
+                break;
+            }
+            byte_to_write = atoi(optarg);
+            byte_to_write &= 0xff;
 
-	int devices = 0;
-	int bytes = 0;
-	int i=0;
-	for (i = optind; i < argc; ++i) {
-		if (argv[i][0] == '/'&&argv[i][1] == 'd'&&argv[i][2] == 'e'&&argv[i][3] == 'v'&&argv[i][4] == '/') {
-			++devices;
-			continue;
-		}
-		++bytes;
-	}
+            patten[0] = (unsigned char)byte_to_write;
+            break;
+        case 'k':
+            opt.kilobyte = true;
+            break;
+        case 'V':
+            verbose = atoi(optarg);
+            break;
+        case 'n': /* -n | --sectors n Write n sectors at once (default is %d) */
+            opt.sectors = atoi(optarg);
+            if (opt.sectors == 0)
+                usage(1);
+            if (opt.sectors >= 0x100000)
+                usage(1);
+            break;
+        case 's': // -s | --start   n Start at sector n (default is first sector)
+            opt.start = strtoull(optarg, (char **)NULL, 10);
+            if (opt.start == (int64_t)-1)
+                usage(1);
+            break;
+        case 'e': // -e | --end     n End at sector n (default is last sector)
+            opt.end = strtoull(optarg, (char **)NULL, 10);
+            if (opt.end == 0)
+                usage(1);
+            break;
+        case 'v': /* -v | --version   Show version and copyright information and quit */
+            version();
+            exit(0);
+            break;
+        case '?': /* -? | --help      Show this help message and quit */
+            ++opt.help;
+            break;
+        default:
+            usage(1);
+        }
+    }
 
-	if (devices == 0) {
-		pr2serr("%s: No devices specified\n", progname);
-		usage(1);
-	}
+    if (opt.help)
+    {
+        _usage();
+        if (opt.help > 1)
+        {
+            // examples();
+        }
+        exit(0);
+    }
 
-	char **device	= (char **) malloc(sizeof(char *) * devices);
-	int *byte		= NULL;
+    int devices = 0;
+    int bytes = 0;
+    int i = 0;
+    for (i = optind; i < argc; ++i)
+    {
+        if (argv[i][0] == '/' && argv[i][1] == 'd' && argv[i][2] == 'e' && argv[i][3] == 'v' && argv[i][4] == '/')
+        {
+            ++devices;
+            continue;
+        }
+        ++bytes;
+    }
 
-	if (bytes) {
-		byte = (int *) malloc(sizeof(int) * bytes);
-	}
+    if (devices == 0)
+    {
+        pr2serr("%s: No devices specified\n", progname);
+        usage(1);
+    }
 
-	devices = 0;
-	bytes = 0;
-	for (i = optind; i < argc; ++i) {
-		device[devices] = (char *) malloc((strlen(argv[i]) + 6) * sizeof(char));
+    char **device = (char **)malloc(sizeof(char *) * devices);
+    devices = 0;
+    for (i = optind; i < argc; ++i)
+    {
+        device[devices] = (char *)malloc((strlen(argv[i]) + 6) * sizeof(char));
 
-		if (argv[i][0] == '/' &&
-				argv[i][1] == 'd' &&
-				argv[i][2] == 'e' &&
-				argv[i][3] == 'v' &&
-				argv[i][4] == '/') {
-			strcpy(device[devices++], argv[i]);
-			continue;
-		}
-
-		int byte_to_write = 0;
-		while (1) {
-			if (strncasecmp(argv[i], "0x", 2) == 0) {
-				if (sscanf(argv[i], "%x", &byte_to_write) == 0) {
-					usage(1);
-				}
-				break;
-			}
-
-			if (argv[i][0] == '0') {
-				if (sscanf(argv[i], "%o", &byte_to_write) == 0) {
-					usage(1);
-				}
-				break;
-			}
-
-			if (toupper(argv[i][0]) == 'R') {
-				byte_to_write = -1;
-				break;
-			}
-
-			if (toupper(argv[i][0]) == 'C') {
-				byte_to_write = -2;
-				break;
-			}
-
-			byte_to_write = atoi(argv[i]);
-
-			if (byte_to_write > 0) {
-				byte_to_write &= 0xff;
-			}
-			break;
-		}
-		byte[bytes++] = byte_to_write;
-	}
-
-	if (bytes == 0) {
-		bytes = 1;
-		byte = (int *) malloc(sizeof(int) * bytes);
-		byte[0] = 0;
-	}
-
-	if (opt.passes == 0) {
-		opt.passes = 1;
-	}
-
-	switch (opt.mode) {
-		case WIPEMODE_NORMAL:
-			opt.passes *= bytes;
-			break;
-		
-		case WIPEMODE_JEFFERY:
-			opt.passes *= 1;
-			break;
-		default:
-			perror("Unimplemented wipe mode");
-	}
-
-	if (opt.passes >= 10000) {
-		usage(1);
-	}
+        if (argv[i][0] == '/' &&
+            argv[i][1] == 'd' &&
+            argv[i][2] == 'e' &&
+            argv[i][3] == 'v' &&
+            argv[i][4] == '/')
+        {
+            strcpy(device[devices++], argv[i]);
+            continue;
+        }
+    }
+    opt.passes = 1;
 
     install_handler(SIGINT, interrupt_handler);
     install_handler(SIGQUIT, interrupt_handler);
     install_handler(SIGPIPE, interrupt_handler);
     install_handler(SIGUSR1, siginfo_handler);
 
-	t_stats stats;
-	stats.device_name = NULL;
-	stats.bytes_per_sector = 0;
-	printf("sg_lib_version: %s\n", sg_lib_version());
+    t_stats stats;
+    stats.device_name = NULL;
+    stats.bytes_per_sector = 0;
+    printf("sg_lib_version: %s\n", sg_lib_version());
 
-	time_t rawtime;
-	struct tm* timeinfo;
+    time_t rawtime;
+    struct tm *timeinfo;
 
-	time ( &rawtime );
-	timeinfo = localtime ( &rawtime );
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
 
-	printf("Start Task local time and date: %s\n", asctime (timeinfo) );
+    printf("Start Task local time and date: %s\n", asctime(timeinfo));
     oflag.cdbsz = DEF_SCSI_CDBSZ;
 
+    for (i = 0; i < devices; ++i)
+    {
+        ret = read_verify_device(device[i], 1, patten, &stats);
+    }
 
-	for (i = 0; i < devices; ++i) {
-		ret = read_verify_device(device[i], bytes, byte, &stats);
-	}
+    free(device);
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
 
-	time ( &rawtime );
-	timeinfo = localtime ( &rawtime );
+    printf("\nend Task local time and date: %s", asctime(timeinfo));
 
-	printf("\end Task local time and date: %s", asctime (timeinfo) );
-
-	return ret;
+    return ret;
 }
